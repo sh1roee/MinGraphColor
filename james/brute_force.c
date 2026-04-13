@@ -1,121 +1,140 @@
-/**
- * brute_force.c - Brute Force Graph Coloring Implementation
+/*
+ * cmsc 142 - minimum graph coloring project
+ * author: james
  * 
- * CMSC 142 - Minimum Graph Coloring Project
- * Author: James
- * 
- * This program finds the chromatic number of a graph using exhaustive
+ * this program finds the chromatic number of a graph using exhaustive
  * search over all possible color assignments.
  * 
- * Algorithm:
- *   1. Start with k = 1 color
- *   2. Generate all k^V possible color assignments (treat as base-k number)
- *   3. Validate each assignment by checking all edges
- *   4. If valid coloring found, k is the chromatic number
- *   5. Otherwise, increment k and repeat
- * 
- * Time Complexity: O(k^V × E) for each k value tried
- * 
- * Reference: https://www.geeksforgeeks.org/graph-coloring-applications/
+ * algorithm:
+ *   1. start with k = 1 color
+ *   2. generate all k^v possible color assignments (treat as base-k number)
+ *   3. validate each assignment by checking all edges
+ *   4. if valid coloring found, k is the chromatic number
+ *   5. otherwise, increment k and repeat
+ *
+ * time complexity: o(k^v * e) for each k value tried
+ * reference: https://www.geeksforgeeks.org/graph-coloring-applications/
  */
 
-#include "brute_force.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <time.h>
+#include <math.h>
 
-/**
- * Load a graph from a text file.
- * 
- * The file format is:
- *   Line 1: V E (number of vertices and edges)
- *   Lines 2 to E+1: u v (edge connecting vertex u to vertex v, 0-indexed)
+#define max_vertices 20 /* maximum number of vertices */
+#define max_edges 200 /* maximum number of edges */
+#define max_colors_to_try 15 /* maximum chromatic number to try */
+#define max_execution_time_seconds 60 /* maximum execution time in seconds */
+
+/* structure to represent a graph */
+typedef struct {
+    int num_vertices;
+    int num_edges;
+    int adjacency[max_vertices][max_vertices];
+} graph;
+
+/* structure to hold results */
+typedef struct {
+    int chromatic_number;
+    int coloring[max_vertices];
+    double time_elapsed;
+    bool found;
+    bool aborted;
+    char abort_reason[256];
+} coloringresult;
+
+/*
+ * load a graph from a text file.
+ * file format:
+ *   line 1: v e (number of vertices and edges)
+ *   lines 2 to e+1: u v (edge connecting vertex u to vertex v, 0-indexed)
  */
-bool load_graph_from_file(const char *filename, Graph *graph) {
+bool load_graph_from_file(const char *filename, graph *g) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) {
-        fprintf(stderr, "Error: Cannot open file '%s'\n", filename);
+        fprintf(stderr, "error: cannot open file '%s'\n", filename);
         return false;
     }
     
-    /* Read number of vertices and edges from first line */
-    if (fscanf(file, "%d %d", &graph->num_vertices, &graph->num_edges) != 2) {
-        fprintf(stderr, "Error: Invalid file format. Expected 'V E' on first line.\n");
+    /* read number of vertices and edges from first line */
+    if (fscanf(file, "%d %d", &g->num_vertices, &g->num_edges) != 2) {
+        fprintf(stderr, "error: invalid file format. expected 'v e' on first line.\n");
         fclose(file);
         return false;
     }
     
-    /* Validate graph size against defined limits */
-    if (graph->num_vertices > MAX_VERTICES) {
-        fprintf(stderr, "Error: Too many vertices (%d). Maximum supported: %d\n", 
-                graph->num_vertices, MAX_VERTICES);
+    /* validate graph size against defined limits */
+    if (g->num_vertices > max_vertices) {
+        fprintf(stderr, "error: too many vertices (%d). maximum supported: %d\n", 
+                g->num_vertices, max_vertices);
         fclose(file);
         return false;
     }
     
-    if (graph->num_edges > MAX_EDGES) {
-        fprintf(stderr, "Error: Too many edges (%d). Maximum supported: %d\n", 
-                graph->num_edges, MAX_EDGES);
+    if (g->num_edges > max_edges) {
+        fprintf(stderr, "error: too many edges (%d). maximum supported: %d\n", 
+                g->num_edges, max_edges);
         fclose(file);
         return false;
     }
     
-    /* Initialize adjacency matrix to all zeros (no edges) */
-    for (int i = 0; i < graph->num_vertices; i++) {
-        for (int j = 0; j < graph->num_vertices; j++) {
-            graph->adjacency[i][j] = 0;
+    /* initialize adjacency matrix to all zeros (no edges) */
+    for (int i = 0; i < g->num_vertices; i++) {
+        for (int j = 0; j < g->num_vertices; j++) {
+            g->adjacency[i][j] = 0;
         }
     }
     
-    /* Read all edges and populate adjacency matrix */
-    for (int i = 0; i < graph->num_edges; i++) {
+    /* read all edges and populate adjacency matrix */
+    for (int i = 0; i < g->num_edges; i++) {
         int u, v;
         if (fscanf(file, "%d %d", &u, &v) != 2) {
-            fprintf(stderr, "Error: Could not read edge %d. Check file format.\n", i + 1);
+            fprintf(stderr, "error: could not read edge %d. check file format.\n", i + 1);
             fclose(file);
             return false;
         }
         
-        /* Validate vertex indices are within bounds */
-        if (u < 0 || u >= graph->num_vertices || v < 0 || v >= graph->num_vertices) {
-            fprintf(stderr, "Error: Edge %d has invalid vertex index (%d, %d). "
-                    "Valid range: 0 to %d\n", i + 1, u, v, graph->num_vertices - 1);
+        /* validate vertex indices are within bounds */
+        if (u < 0 || u >= g->num_vertices || v < 0 || v >= g->num_vertices) {
+            fprintf(stderr, "error: edge %d has invalid vertex index (%d, %d). "
+                    "valid range: 0 to %d\n", i + 1, u, v, g->num_vertices - 1);
             fclose(file);
             return false;
         }
         
-        /* Add edge to adjacency matrix (undirected graph: symmetric) */
-        graph->adjacency[u][v] = 1;
-        graph->adjacency[v][u] = 1;
+        /* add edge to adjacency matrix (undirected graph: symmetric) */
+        g->adjacency[u][v] = 1;
+        g->adjacency[v][u] = 1;
     }
     
     fclose(file);
     return true;
 }
 
-/**
- * Check if a color assignment has any conflicts.
- * 
- * A conflict occurs when two adjacent vertices have the same color.
- * This function scans all edges to verify the coloring is proper.
+/*
+ * check if a color assignment has any conflicts.
+ * a conflict occurs when two adjacent vertices have the same color.
  */
-bool has_adjacent_conflict(const Graph *graph, const int colors[]) {
-    /* Check every pair of vertices for adjacent conflicts */
-    for (int u = 0; u < graph->num_vertices; u++) {
-        for (int v = u + 1; v < graph->num_vertices; v++) {
-            /* If there's an edge between u and v */
-            if (graph->adjacency[u][v] == 1) {
-                /* Check if they have the same color */
+bool has_adjacent_conflict(const graph *g, const int colors[]) {
+    /* check every pair of vertices for adjacent conflicts */
+    for (int u = 0; u < g->num_vertices; u++) {
+        for (int v = u + 1; v < g->num_vertices; v++) {
+            /* if there's an edge between u and v */
+            if (g->adjacency[u][v] == 1) {
+                /* check if they have the same color */
                 if (colors[u] == colors[v]) {
-                    return true;  /* Conflict found */
+                    return true;  /* conflict found */
                 }
             }
         }
     }
-    return false;  /* No conflicts - valid coloring */
+    return false;  /* no conflicts - valid coloring */
 }
 
-/**
- * Validate if a color assignment uses only colors from 0 to k-1.
- * 
- * This ensures we're checking a proper k-coloring, not just any coloring.
+/*
+ * validate if a color assignment uses only colors from 0 to k-1.
+ * this ensures we're checking a proper k-coloring.
  */
 bool uses_valid_colors(const int colors[], int num_vertices, int k) {
     for (int i = 0; i < num_vertices; i++) {
@@ -126,250 +145,237 @@ bool uses_valid_colors(const int colors[], int num_vertices, int k) {
     return true;
 }
 
-/**
- * Check if a color assignment is valid for k colors.
- * 
- * A valid k-coloring must:
- *   1. Use only colors in range [0, k-1]
- *   2. Have no adjacent vertices with the same color
+/*
+ * check if a color assignment is valid for k colors.
+ * a valid k-coloring must:
+ *   1. use only colors in range [0, k-1]
+ *   2. have no adjacent vertices with the same color
  */
-bool is_valid_coloring(const Graph *graph, const int colors[], int k) {
-    if (!uses_valid_colors(colors, graph->num_vertices, k)) {
+bool is_valid_coloring(const graph *g, const int colors[], int k) {
+    if (!uses_valid_colors(colors, g->num_vertices, k)) {
         return false;
     }
-    return !has_adjacent_conflict(graph, colors);
+    return !has_adjacent_conflict(g, colors);
 }
 
-/**
- * Generate the next color assignment by incrementing a base-k number.
- * 
- * We treat the color assignment as a number in base k with V digits.
- * To generate all combinations, we simply increment this number.
- * 
- * Example for V=3, k=2:
+/*
+ * generate the next color assignment by incrementing a base-k number.
+ * we treat the color assignment as a number in base k with v digits.
+ * to generate all combinations, we simply increment this number.
+ * example for v=3, k=2:
  *   [0,0,0] -> [0,0,1] -> [0,1,0] -> [0,1,1] -> [1,0,0] -> [1,0,1] -> [1,1,0] -> [1,1,1] -> done
  */
 bool next_color_assignment(int colors[], int num_vertices, int k) {
     int position = 0;
     
     while (position < num_vertices) {
-        /* Increment current digit */
+        /* increment current digit */
         colors[position]++;
         
-        /* If no carry needed, we're done */
+        /* if no carry needed, we're done */
         if (colors[position] < k) {
             return true;
         }
         
-        /* Carry to next digit: reset current and continue */
+        /* carry to next digit: reset current and continue */
         colors[position] = 0;
         position++;
     }
     
-    /* All combinations tried (overflow) */
+    /* all combinations tried (overflow) */
     return false;
 }
 
-/**
- * Check if execution time has exceeded the safety threshold.
+/*
+ * check if execution time has exceeded the safety threshold.
  */
 bool check_timeout(clock_t start_time) {
     clock_t current_time = clock();
     double elapsed = ((double)(current_time - start_time)) / CLOCKS_PER_SEC;
-    return elapsed > MAX_EXECUTION_TIME_SECONDS;
+    return elapsed > max_execution_time_seconds;
 }
 
-/**
- * Find the chromatic number using brute force enumeration.
- * 
- * For each k from 1 to max_k:
- *   - Generate all k^V color assignments
- *   - Check each for validity
- *   - Return first valid coloring found
+/*
+ * find the chromatic number using brute force enumeration.
+ * for each k from 1 to max_k:
+ *   - generate all k^v color assignments
+ *   - check each for validity
+ *   - return first valid coloring found
  */
-ColoringResult find_chromatic_number(const Graph *graph, int max_k, clock_t start_time) {
-    ColoringResult result;
+coloringresult find_chromatic_number(const graph *g, int max_k, clock_t start_time) {
+    coloringresult result;
     result.found = false;
     result.aborted = false;
     result.chromatic_number = -1;
     
-    int colors[MAX_VERTICES];
+    int colors[max_vertices];
     
-    /* Try increasing number of colors starting from 1 */
+    /* try increasing number of colors starting from 1 */
     for (int k = 1; k <= max_k; k++) {
-        /* Initialize all vertices to color 0 */
-        for (int i = 0; i < graph->num_vertices; i++) {
+        /* initialize all vertices to color 0 */
+        for (int i = 0; i < g->num_vertices; i++) {
             colors[i] = 0;
         }
         
-        /* Generate and test all k^V color assignments */
+        /* generate and test all k^v color assignments */
         bool more_assignments = true;
         while (more_assignments) {
-            /* Check timeout to prevent excessive runtime */
+            /* check timeout to prevent excessive runtime */
             if (check_timeout(start_time)) {
                 result.aborted = true;
                 snprintf(result.abort_reason, sizeof(result.abort_reason),
-                    "Execution time exceeded %d seconds", MAX_EXECUTION_TIME_SECONDS);
+                    "execution time exceeded %d seconds", max_execution_time_seconds);
                 return result;
             }
             
-            /* Check if current assignment is valid */
-            if (is_valid_coloring(graph, colors, k)) {
-                /* Found a valid k-coloring! */
+            /* check if current assignment is valid */
+            if (is_valid_coloring(g, colors, k)) {
+                /* found a valid k-coloring */
                 result.found = true;
                 result.chromatic_number = k;
-                for (int i = 0; i < graph->num_vertices; i++) {
-                    /* Store colors as 1-indexed for output */
+                for (int i = 0; i < g->num_vertices; i++) {
+                    /* store colors as 1-indexed for output */
                     result.coloring[i] = colors[i] + 1;
                 }
                 return result;
             }
             
-            /* Generate next color assignment */
-            more_assignments = next_color_assignment(colors, graph->num_vertices, k);
+            /* generate next color assignment */
+            more_assignments = next_color_assignment(colors, g->num_vertices, k);
         }
-        
-        /* All k^V assignments tried, none valid - need more colors */
     }
     
-    /* Exceeded max_k without finding valid coloring */
+    /* exceeded max_k without finding valid coloring */
     result.aborted = true;
     snprintf(result.abort_reason, sizeof(result.abort_reason),
-        "Exceeded maximum colors to try (%d)", max_k);
+        "exceeded maximum colors to try (%d)", max_k);
     return result;
 }
 
-/**
- * Print graph information summary.
+/*
+ * print graph information summary.
  */
-void print_graph_info(const Graph *graph) {
-    printf("Graph Statistics:\n");
-    printf("  Vertices: %d\n", graph->num_vertices);
-    printf("  Edges: %d\n", graph->num_edges);
+void print_graph_info(const graph *g) {
+    printf("graph statistics:\n");
+    printf("  vertices: %d\n", g->num_vertices);
+    printf("  edges: %d\n", g->num_edges);
     
-    /* Calculate and display maximum degree */
+    /* calculate and display maximum degree */
     int max_degree = 0;
-    for (int i = 0; i < graph->num_vertices; i++) {
+    for (int i = 0; i < g->num_vertices; i++) {
         int degree = 0;
-        for (int j = 0; j < graph->num_vertices; j++) {
-            degree += graph->adjacency[i][j];
+        for (int j = 0; j < g->num_vertices; j++) {
+            degree += g->adjacency[i][j];
         }
         if (degree > max_degree) {
             max_degree = degree;
         }
     }
-    printf("  Maximum degree: %d\n", max_degree);
-    printf("  Theoretical lower bound: %s\n", max_degree > 0 ? "at least 2" : "1 (empty graph)");
+    printf("  maximum degree: %d\n", max_degree);
     printf("\n");
 }
 
-/**
- * Print the coloring results.
+/*
+ * print the coloring results.
  */
-void print_results(const ColoringResult *result, const Graph *graph) {
+void print_results(const coloringresult *result, const graph *g) {
     printf("===================================\n");
-    printf("Graph Coloring - Brute Force Search\n");
+    printf("graph coloring - brute force search\n");
     printf("===================================\n\n");
     
-    print_graph_info(graph);
+    print_graph_info(g);
     
     if (result->aborted) {
-        printf("*** SEARCH ABORTED ***\n");
-        printf("Reason: %s\n", result->abort_reason);
-        printf("\nThe graph may be too large for brute force approach.\n");
-        printf("Consider using the greedy algorithm for larger graphs.\n");
+        printf("*** search aborted ***\n");
+        printf("reason: %s\n", result->abort_reason);
+        printf("\nthe graph may be too large for brute force approach.\n");
         return;
     }
     
     if (!result->found) {
-        printf("*** NO SOLUTION FOUND ***\n");
-        printf("Could not find a valid coloring within constraints.\n");
+        printf("*** no solution found ***\n");
+        printf("could not find a valid coloring within constraints.\n");
         return;
     }
     
-    printf("*** RESULTS ***\n");
-    printf("Chromatic number: %d\n", result->chromatic_number);
-    printf("\nVertex coloring:\n");
-    for (int i = 0; i < graph->num_vertices; i++) {
-        printf("  Vertex %d: Color %d\n", i, result->coloring[i]);
+    printf("*** results ***\n");
+    printf("chromatic number: %d\n", result->chromatic_number);
+    printf("\nvertex coloring:\n");
+    for (int i = 0; i < g->num_vertices; i++) {
+        printf("  vertex %d: color %d\n", i, result->coloring[i]);
     }
     
-    printf("\nTime elapsed: %.6f seconds\n", result->time_elapsed);
-    
-    /* Provide context about the search */
-    printf("\n--- Search Summary ---\n");
-    printf("This solution is OPTIMAL (guaranteed minimum).\n");
-    printf("All possible %d-colorings were examined.\n", result->chromatic_number);
+    printf("\ntime elapsed: %.6f seconds\n", result->time_elapsed);
+    printf("\nthis solution is optimal (guaranteed minimum).\n");
 }
 
-/**
- * Print usage instructions.
+
+/*
+ * print usage instructions.
  */
 void print_usage(const char *program_name) {
-    printf("Usage: %s <graph_file>\n\n", program_name);
-    printf("Finds the chromatic number of a graph using brute force search.\n\n");
-    printf("Arguments:\n");
-    printf("  graph_file    Path to graph input file\n\n");
-    printf("File format:\n");
-    printf("  V E           (first line: vertices and edges)\n");
+    printf("usage: %s <graph_file>\n\n", program_name);
+    printf("finds the chromatic number of a graph using brute force search.\n\n");
+    printf("arguments:\n");
+    printf("  graph_file    path to graph input file\n\n");
+    printf("file format:\n");
+    printf("  v e           (first line: vertices and edges)\n");
     printf("  u1 v1         (edge 1: vertex indices, 0-indexed)\n");
-    printf("  u2 v2         (edge 2)\n");
     printf("  ...\n\n");
-    printf("Example:\n");
+    printf("example:\n");
     printf("  %s test-cases/small_graph.txt\n", program_name);
 }
 
-/**
- * Check if graph size is within practical limits.
+/*
+ * check if graph size is within practical limits.
  */
 bool check_size_limits(int num_vertices, int max_k) {
-    /* Warn if graph is likely too large for brute force */
+    /* warn if graph is likely too large for brute force */
     if (num_vertices > 12) {
-        printf("WARNING: Graph has %d vertices.\n", num_vertices);
-        printf("Brute force complexity is O(k^V × E).\n");
-        printf("This may take a very long time or exceed memory limits.\n");
-        printf("Consider using the greedy algorithm instead.\n\n");
+        printf("warning: graph has %d vertices.\n", num_vertices);
+        printf("brute force complexity is o(k^v * e).\n");
+        printf("this may take a very long time.\n\n");
         return false;
     }
     return true;
 }
 
-/**
- * Main entry point.
+/*
+ * main entry point.
  */
 int main(int argc, char *argv[]) {
-    /* Check command line arguments */
+    /* check command line arguments */
     if (argc != 2) {
         print_usage(argv[0]);
         return 1;
     }
     
-    /* Load graph from file */
-    Graph graph;
-    if (!load_graph_from_file(argv[1], &graph)) {
+    /* load graph from file */
+    graph g;
+    if (!load_graph_from_file(argv[1], &g)) {
         return 1;
     }
     
-    /* Warn about large graphs */
-    check_size_limits(graph.num_vertices, MAX_COLORS_TO_TRY);
+    /* warn about large graphs */
+    check_size_limits(g.num_vertices, max_colors_to_try);
     
-    /* Record start time for performance measurement */
+    /* record start time for performance measurement */
     clock_t start_time = clock();
     
-    /* Perform brute force search */
-    ColoringResult result = find_chromatic_number(&graph, MAX_COLORS_TO_TRY, start_time);
+    /* perform brute force search */
+    coloringresult result = find_chromatic_number(&g, max_colors_to_try, start_time);
     
-    /* Record end time */
+    /* record end time */
     clock_t end_time = clock();
     result.time_elapsed = ((double)(end_time - start_time)) / CLOCKS_PER_SEC;
     
-    /* Print results */
-    print_results(&result, &graph);
+    /* print results */
+    print_results(&result, &g);
     
-    /* Return appropriate exit code */
+    /* return appropriate exit code */
     if (result.found) {
         return 0;
     } else {
-        return 2;  /* No solution found */
+        return 2;  /* no solution found */
     }
 }
