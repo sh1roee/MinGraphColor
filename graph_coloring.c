@@ -83,13 +83,13 @@ bool valid_coloring(graph *g, int colors[], int k) {
             return false;
     for (int u = 0; u < g->v; u++) // check if adjacent vertices have different colors
         for (int v = u + 1; v < g->v; v++)
-            if (g->adj[u][v] && colors[u] == colors[v])
+            if (g->adj[u][v] && colors[u] == colors[v]) // if adjacent vertices have same color
                 return false;
     return true;
 }
 
-// generates next k-coloring in lexicographic order
-bool next_assignment(int colors[], int n, int k) {
+// generates next k-coloring in order
+bool next_assignment(int colors[], int n, int k) { 
     for (int i = 0; i < n; i++) {
         if (++colors[i] < k) return true; // increment and return true
         colors[i] = 0; // reset and carry
@@ -112,6 +112,7 @@ int find_chromatic(graph *g, int colors[], clock_t start) {
     return -1;
 }
 
+// solves graph coloring using brute force
 void solve_brute_force(graph *g) {
     clock_t start = clock(); // start timer
     int colors[max_vertices];
